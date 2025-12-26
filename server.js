@@ -54,6 +54,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running ✅' });
 });
 
+// Database initialization endpoint (one-time use)
+// SECURITY: Requires INIT_SECRET env var in production
+const { initializeDatabase } = require('./src/controllers/initController');
+app.post('/api/init-db', initializeDatabase);
+app.get('/api/init-db', initializeDatabase); // Also support GET for easy browser access
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
