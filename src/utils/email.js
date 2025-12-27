@@ -13,11 +13,14 @@ const isTestMode = process.env.TAC_TEST_MODE === 'true';
 
 // Create transporter (only if NOT in test mode)
 let transporter = null;
+let emailConfigValid = false;
+
 if (!isTestMode) {
   // Validate email configuration
   if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.warn('⚠️ Email configuration incomplete. TAC codes will be returned in API response.');
     console.warn('   Missing: EMAIL_HOST, EMAIL_USER, or EMAIL_PASS');
+    console.warn('   Please check your .env file and ensure all email settings are configured.');
   } else {
     const emailPort = parseInt(process.env.EMAIL_PORT || '587');
     const useSecure = emailPort === 465;
@@ -56,6 +59,27 @@ if (!isTestMode) {
     console.log(`   User: ${process.env.EMAIL_USER}`);
     console.log(`   Password: ${process.env.EMAIL_PASS ? '***' + process.env.EMAIL_PASS.slice(-4) : 'NOT SET'}`);
     console.log(`   Test Mode: ${isTestMode ? 'ENABLED (emails disabled)' : 'DISABLED (emails enabled)'}`);
+    
+    // Verify email connection (async, non-blocking)
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error('❌ Email configuration verification failed:');
+        console.error(`   Error: ${error.message}`);
+        if (error.code === 'EAUTH') {
+          console.error('   ⚠️  Authentication failed - check your EMAIL_USER and EMAIL_PASS');
+          console.error('   For Gmail, make sure you are using an App Password, not your regular password.');
+          console.error('   Get App Password from: https://myaccount.google.com/apppasswords');
+        } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+          console.error('   ⚠️  Connection failed - check your EMAIL_HOST and network connection');
+        } else {
+          console.error(`   Error code: ${error.code}`);
+        }
+        emailConfigValid = false;
+      } else {
+        console.log('✅ Email configuration verified successfully!');
+        emailConfigValid = true;
+      }
+    });
   }
 } else {
   console.log('🔧 TAC_TEST_MODE is enabled - emails will not be sent');
@@ -132,12 +156,28 @@ const sendTACEmail = async (email, tacCode) => {
       console.error('   Error code:', error.code);
       console.error('   Error command:', error.command);
       
+      // Provide specific error messages for common issues
+      if (error.code === 'EAUTH') {
+        console.error('   ⚠️  Authentication failed - Invalid email credentials');
+        console.error('   For Gmail: Use App Password, not regular password');
+        console.error('   Get App Password: https://myaccount.google.com/apppasswords');
+      } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+        console.error('   ⚠️  Connection failed - Check EMAIL_HOST and network');
+      } else if (error.code === 'EMESSAGE') {
+        console.error('   ⚠️  Message rejected - Check recipient email address');
+      }
+      
       // Retry on connection timeout or connection errors
-      if (attempt < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED')) {
+      if (attempt < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' || error.code === 'ECONNECTION')) {
         const delay = attempt * 2000; // Exponential backoff: 2s, 4s, 6s
         console.log(`⏳ Waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
+      }
+      
+      // Don't retry authentication errors - they won't succeed
+      if (error.code === 'EAUTH') {
+        break;
       }
       
       // If not a retryable error or max retries reached, break
@@ -151,10 +191,21 @@ const sendTACEmail = async (email, tacCode) => {
   console.error(`   Error code: ${lastError?.code || 'N/A'}`);
   console.error(`   TAC Code (fallback): ${tacCode}`);
   
+  // Provide user-friendly error message
+  let userFriendlyError = 'Email sending failed';
+  if (lastError?.code === 'EAUTH') {
+    userFriendlyError = 'Email authentication failed. Please check email configuration.';
+  } else if (lastError?.code === 'ECONNECTION' || lastError?.code === 'ETIMEDOUT') {
+    userFriendlyError = 'Email server connection failed. Please check network and email settings.';
+  } else if (lastError?.code === 'EMESSAGE') {
+    userFriendlyError = 'Invalid recipient email address.';
+  }
+  
   return {
     test: true, // Mark as test so TAC is returned to user
     tac: tacCode,
-    reason: `Email failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`,
+    reason: userFriendlyError,
+    detailedError: `${lastError?.message || 'Unknown error'}`,
     errorCode: lastError?.code,
     emailFailed: true
   };
@@ -171,6 +222,12 @@ const sendResetEmail = async (email, resetCode) => {
       test: true,
       code: resetCode
     };
+  }
+
+  // Check if transporter is configured
+  if (!transporter) {
+    console.error(`❌ Email transporter not configured for password reset!`);
+    throw new Error('Email transporter not configured - missing EMAIL_HOST, EMAIL_USER, or EMAIL_PASS');
   }
 
   // Retry logic for connection issues
@@ -240,6 +297,12 @@ const sendWelcomeEmail = async (email, name) => {
     return { test: true };
   }
 
+  // Check if transporter is configured
+  if (!transporter) {
+    console.error(`❌ Email transporter not configured for welcome email!`);
+    throw new Error('Email transporter not configured - missing EMAIL_HOST, EMAIL_USER, or EMAIL_PASS');
+  }
+
   // Retry logic for connection issues
   const maxRetries = 3;
   let lastError = null;
@@ -306,12 +369,133 @@ const sendWelcomeEmail = async (email, name) => {
     }
   }
   
-  // All retries failed
-  throw lastError || new Error('Welcome email failed after multiple attempts');
+  // All retries failed - return error but don't throw (allow registration to continue)
+  console.error(`❌ Welcome email failed after ${maxRetries} attempts for ${email}`);
+  console.error(`   Last error: ${lastError?.message || 'Unknown error'}`);
+  return { test: true, reason: `Email failed: ${lastError?.message || 'Unknown error'}` };
+};
+
+// ============================================
+// 📌 SEND NOTIFICATION EMAIL (Supports Test Mode)
+// ============================================
+const sendNotificationEmail = async (email, name, notificationTitle, notificationMessage, notificationType = 'general') => {
+  // TEST MODE: do not send email
+  if (isTestMode) {
+    console.log(`🔧 [TEST MODE] Notification email skipped for ${email}: ${notificationTitle}`);
+    return { test: true };
+  }
+
+  // Check if transporter is configured
+  if (!transporter) {
+    console.warn(`⚠️ Email transporter not configured for notification email to ${email}`);
+    return { test: true, reason: 'Email transporter not configured' };
+  }
+
+  // Retry logic for connection issues
+  const maxRetries = 3;
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Determine icon and color based on notification type
+      let icon = '📢';
+      let color = '#2563EB';
+      let borderColor = '#2563EB';
+      
+      if (notificationType === 'event' || notificationType === 'upcoming_event') {
+        icon = '📅';
+        color = '#10b981';
+        borderColor = '#10b981';
+      } else if (notificationType === 'approval') {
+        icon = '✅';
+        color = '#059669';
+        borderColor = '#059669';
+      } else if (notificationType === 'system') {
+        icon = '🔔';
+        color = '#d97706';
+        borderColor = '#d97706';
+      }
+
+      const mailOptions = {
+        from: `"GPS UTM" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `${icon} GPS UTM - ${notificationTitle}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid ${borderColor}; border-radius: 10px;">
+            <h2 style="color: ${color}; text-align: center;">🎓 Gerakan Pengguna Siswa UTM</h2>
+            <h3 style="text-align: center; color: #333;">Student Consumer Movement</h3>
+            <hr style="border: 1px solid ${borderColor};">
+            <h2 style="color: #333;">${icon} ${notificationTitle}</h2>
+            <p style="font-size: 16px; line-height: 1.6; color: #333;">${notificationMessage}</p>
+            <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0; color: #666; font-size: 14px;">
+                💡 <strong>Tip:</strong> You can view all your notifications in your dashboard.
+              </p>
+            </div>
+            <hr style="border: 1px solid #e5e7eb; margin-top: 30px;">
+            <p style="text-align: center; color: #999; font-size: 12px;">
+              © 2025 Gerakan Pengguna Siswa UTM<br>
+              Empowering students to become smart, ethical, and responsible consumers
+            </p>
+          </div>
+        `
+      };
+
+      if (attempt > 1) {
+        console.log(`🔄 Retrying notification email (attempt ${attempt}/${maxRetries})...`);
+      }
+
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Notification email sent to ${email}: ${notificationTitle}`);
+      return { test: false };
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Notification email failed (attempt ${attempt}/${maxRetries}) for ${email}:`, error.message);
+      
+      // Retry on connection timeout or connection errors
+      if (attempt < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' || error.code === 'ECONNECTION')) {
+        const delay = attempt * 2000; // Exponential backoff: 2s, 4s, 6s
+        console.log(`⏳ Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // Don't retry authentication errors
+      if (error.code === 'EAUTH') {
+        break;
+      }
+      
+      // If not a retryable error or max retries reached, break
+      break;
+    }
+  }
+  
+  // All retries failed - log but don't throw (notifications should still be saved in DB)
+  console.error(`❌ Notification email failed after ${maxRetries} attempts for ${email}`);
+  console.error(`   Last error: ${lastError?.message || 'Unknown error'}`);
+  return { test: true, reason: `Email failed: ${lastError?.message || 'Unknown error'}` };
+};
+
+// ============================================
+// 📌 GET EMAIL CONFIGURATION STATUS
+// ============================================
+const getEmailConfigStatus = () => {
+  return {
+    isTestMode,
+    isConfigured: !!transporter,
+    hasConfig: !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS),
+    emailHost: process.env.EMAIL_HOST || 'NOT SET',
+    emailPort: process.env.EMAIL_PORT || '587',
+    emailUser: process.env.EMAIL_USER || 'NOT SET',
+    emailPassSet: !!process.env.EMAIL_PASS,
+    emailConfigValid
+  };
 };
 
 module.exports = {
   sendTACEmail,
   sendResetEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendNotificationEmail,
+  getEmailConfigStatus
 };
