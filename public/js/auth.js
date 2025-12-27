@@ -244,10 +244,15 @@ async function handleLogin(e) {
             // Store email for TAC verification
             sessionStorage.setItem('pendingEmail', email);
             
-            // If test mode, show TAC in console/alert
+            // If TAC is in response (test mode or email failed), show it
             if (response.tac) {
                 console.log('🔐 TAC CODE:', response.tac);
-                AppUtils.showInfo(`TAC Code (Test Mode): ${response.tac}`);
+                if (response.emailError || response.reason) {
+                    AppUtils.showWarning(`Email sending failed. Your TAC code is: ${response.tac}`);
+                    console.error('Email error:', response.emailError || response.reason);
+                } else {
+                    AppUtils.showInfo(`TAC Code (Test Mode): ${response.tac}`);
+                }
             }
             
             // Show TAC verification modal
