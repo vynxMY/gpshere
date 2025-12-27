@@ -384,8 +384,9 @@ const cancelApplication = async (req, res) => {
 
 // Get ALL applications across all events (admin only)
 const getAllApplications = async (req, res) => {
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
 
     const [applications] = await conn.query(
       `SELECT 
@@ -404,12 +405,24 @@ const getAllApplications = async (req, res) => {
        ORDER BY ea.created_at DESC`
     );
 
-    conn.release();
-    return res.json(applications);
+    if (conn) conn.release();
+    return res.json(applications || []);
 
   } catch (err) {
     console.error('getAllApplications error:', err);
-    return res.status(500).json({ error: 'Failed to fetch applications' });
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
+    
+    if (conn) conn.release();
+    return res.status(500).json({ 
+      error: 'Failed to fetch applications',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
