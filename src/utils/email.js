@@ -48,7 +48,17 @@ if (!isTestMode) {
     });
     
     console.log(`📧 Email transporter configured: ${process.env.EMAIL_HOST}:${emailPort} (secure: ${useSecure})`);
+    
+    // Verify email configuration on startup
+    console.log(`📧 Email Configuration Check:`);
+    console.log(`   Host: ${process.env.EMAIL_HOST}`);
+    console.log(`   Port: ${emailPort}`);
+    console.log(`   User: ${process.env.EMAIL_USER}`);
+    console.log(`   Password: ${process.env.EMAIL_PASS ? '***' + process.env.EMAIL_PASS.slice(-4) : 'NOT SET'}`);
+    console.log(`   Test Mode: ${isTestMode ? 'ENABLED (emails disabled)' : 'DISABLED (emails enabled)'}`);
   }
+} else {
+  console.log('🔧 TAC_TEST_MODE is enabled - emails will not be sent');
 }
 
 // ============================================
@@ -66,11 +76,14 @@ const sendTACEmail = async (email, tacCode) => {
 
   // PRODUCTION MODE: send email normally
   if (!transporter) {
-    console.warn(`⚠️ Email transporter not configured. TAC for ${email}: ${tacCode}`);
+    console.error(`❌ Email transporter not configured!`);
+    console.error(`   Missing: EMAIL_HOST, EMAIL_USER, or EMAIL_PASS`);
+    console.error(`   TAC Code (fallback): ${tacCode}`);
     return {
       test: true,
       tac: tacCode,
-      reason: 'Email not configured'
+      reason: 'Email transporter not configured - missing EMAIL_HOST, EMAIL_USER, or EMAIL_PASS',
+      emailFailed: true
     };
   }
 
@@ -132,11 +145,18 @@ const sendTACEmail = async (email, tacCode) => {
     }
   }
   
-  // All retries failed - return TAC in response (for development/testing)
+  // All retries failed - return TAC in response so user can still log in
+  console.error(`❌ Email sending failed after ${maxRetries} attempts for ${email}`);
+  console.error(`   Last error: ${lastError?.message || 'Unknown error'}`);
+  console.error(`   Error code: ${lastError?.code || 'N/A'}`);
+  console.error(`   TAC Code (fallback): ${tacCode}`);
+  
   return {
-    test: true,
+    test: true, // Mark as test so TAC is returned to user
     tac: tacCode,
-    reason: `Email failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
+    reason: `Email failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`,
+    errorCode: lastError?.code,
+    emailFailed: true
   };
 };
 
