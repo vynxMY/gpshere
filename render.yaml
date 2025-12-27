@@ -10,8 +10,7 @@ services:
         value: production
       - key: PORT
         value: 10000
-      # Database configuration - Update these with your external MySQL database
-      # For external MySQL services (PlanetScale, Railway, Aiven, etc.)
+      # Database configuration
       - key: DB_HOST
         sync: false
       - key: DB_USER
@@ -24,7 +23,7 @@ services:
         value: 3306  # MySQL default port
       # Database SSL (set to true for cloud databases)
       - key: DB_SSL
-        value: true  # Required for most external MySQL services
+        value: true 
       # JWT Secret - Generate a strong random string
       - key: JWT_SECRET
         sync: false
@@ -37,15 +36,8 @@ services:
         sync: false
       - key: EMAIL_PASS
         sync: false
-      # TAC Test Mode (set to false in production)
+      # TAC Test Mode
       - key: TAC_TEST_MODE
         value: false
 
-# Note: Render.com free tier doesn't include MySQL databases
-# You'll need to use an external MySQL service like:
-# - PlanetScale (free tier available)
-# - Railway (free tier available)
-# - Aiven (free tier available)
-# - AWS RDS (paid)
-# - Google Cloud SQL (paid)
 
