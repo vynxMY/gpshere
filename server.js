@@ -62,6 +62,44 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running ✅' });
 });
 
+// Email configuration diagnostic endpoint (for troubleshooting)
+app.get('/api/email-config', (req, res) => {
+  const { getEmailConfigStatus } = require('./src/utils/email');
+  const config = getEmailConfigStatus();
+  
+  // Don't expose sensitive information
+  const safeConfig = {
+    isTestMode: config.isTestMode,
+    isConfigured: config.isConfigured,
+    hasConfig: config.hasConfig,
+    emailHost: config.emailHost,
+    emailPort: config.emailPort,
+    emailUser: config.emailUser,
+    emailPassSet: config.emailPassSet,
+    emailConfigValid: config.emailConfigValid,
+    recommendations: []
+  };
+  
+  // Add recommendations
+  if (config.isTestMode) {
+    safeConfig.recommendations.push('TAC_TEST_MODE is enabled. Set TAC_TEST_MODE=false in .env to enable email sending.');
+  }
+  if (!config.hasConfig) {
+    safeConfig.recommendations.push('Email configuration is missing. Set EMAIL_HOST, EMAIL_USER, and EMAIL_PASS in .env file.');
+  }
+  if (config.hasConfig && !config.isConfigured) {
+    safeConfig.recommendations.push('Email configuration exists but transporter failed to initialize. Check your email settings.');
+  }
+  if (config.hasConfig && config.isConfigured && !config.emailConfigValid) {
+    safeConfig.recommendations.push('Email configuration verification failed. Check your email credentials (for Gmail, use App Password).');
+  }
+  if (config.emailHost === 'smtp.gmail.com' && !config.emailConfigValid) {
+    safeConfig.recommendations.push('For Gmail: Use App Password instead of regular password. Get it from: https://myaccount.google.com/apppasswords');
+  }
+  
+  res.json(safeConfig);
+});
+
 // Database initialization endpoint (one-time use)
 // SECURITY: Requires INIT_SECRET env var in production
 const { initializeDatabase } = require('./src/controllers/initController');
