@@ -6,7 +6,7 @@
 
 const pool = require('../config/database');
 const bcrypt = require('bcryptjs');
-const { sendTACEmail, sendWelcomeEmail, sendResetEmail } = require('../utils/email');
+const { sendTACEmail, sendWelcomeEmail, sendResetEmail, sendNotificationEmail } = require('../utils/email');
 require('dotenv').config();
 
 // ========== REGISTER USER ==========
@@ -59,8 +59,15 @@ const register = async (req, res) => {
 
     conn.release();
 
-    // Send welcome email
-    await sendWelcomeEmail(email, name);
+    // Send welcome email (non-blocking - don't fail registration if email fails)
+    try {
+      await sendWelcomeEmail(email, name);
+      console.log(`✅ Welcome email sent to ${email}`);
+    } catch (emailError) {
+      // Log error but don't fail registration
+      console.error(`⚠️ Welcome email failed for ${email}:`, emailError.message);
+      console.log('   Registration will continue despite email failure');
+    }
 
     return res.status(201).json({ 
       message: 'Registration successful! Your account is pending admin approval.' 
@@ -162,7 +169,9 @@ const login = async (req, res) => {
           requiresTAC: true,
           tac: result.tac,
           emailFailed: !isTestMode,
-          emailError: emailError
+          emailError: emailError,
+          detailedError: result.detailedError,
+          errorCode: result.errorCode
         });
       }
       

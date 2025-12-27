@@ -4,6 +4,8 @@
 // Handles user profile, dashboard, role-based access
 
 const pool = require('../config/database');
+const { sendNotificationEmail } = require('../utils/email');
+const { createNotification } = require('./notificationController');
 
 // Get user profile
 const getUserProfile = async (req, res) => {
@@ -49,26 +51,65 @@ const getAllUsers = async (req, res) => {
 
 // Approve user account (admin only)
 const approveUser = async (req, res) => {
+  let conn = null;
   try {
     const { userId } = req.body;
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
 
-   await conn.query(
-    "UPDATE users SET status = 'approved', role = 'member' WHERE id = ?",
-    [userId]
-  );
+    // Get user info before updating
+    const [users] = await conn.query('SELECT email, name FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      conn.release();
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+
+    // Update user status
+    await conn.query(
+      "UPDATE users SET status = 'approved', role = 'member' WHERE id = ?",
+      [userId]
+    );
 
     conn.release();
+
+    // Send approval notification email (non-blocking)
+    try {
+      await sendNotificationEmail(
+        user.email,
+        user.name || 'User',
+        '✅ Account Approved - Welcome to GPS UTM!',
+        `Congratulations ${user.name || 'User'}! Your account has been approved by the administrator. You can now log in and access all member features.`,
+        'approval'
+      );
+    } catch (emailError) {
+      console.error(`⚠️ Failed to send approval email to ${user.email}:`, emailError.message);
+    }
+
+    // Create in-app notification
+    try {
+      await createNotification(
+        userId,
+        'approval',
+        '✅ Account Approved',
+        'Your account has been approved! You can now access all member features.',
+        null
+      );
+    } catch (notifError) {
+      console.error(`⚠️ Failed to create approval notification:`, notifError.message);
+    }
 
     return res.json({ message: 'User approved successfully' });
   } catch (error) {
     console.error('Error approving user:', error);
+    if (conn) conn.release();
     return res.status(500).json({ error: 'Failed to approve user' });
   }
 };
 
 // Update user status (admin only) - for approve/reject
 const updateUserStatus = async (req, res) => {
+  let conn = null;
   try {
     const userId = req.params.userId;
     const { status } = req.body;
@@ -77,7 +118,16 @@ const updateUserStatus = async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
+
+    // Get user info before updating
+    const [users] = await conn.query('SELECT email, name FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      conn.release();
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
 
     // If approving, also set role to member
     if (status === 'approved') {
@@ -94,9 +144,38 @@ const updateUserStatus = async (req, res) => {
 
     conn.release();
 
+    // Send email notification based on status (non-blocking)
+    if (status === 'approved' && user.email) {
+      try {
+        await sendNotificationEmail(
+          user.email,
+          user.name || 'User',
+          '✅ Account Approved - Welcome to GPS UTM!',
+          `Congratulations ${user.name || 'User'}! Your account has been approved by the administrator. You can now log in and access all member features.`,
+          'approval'
+        );
+      } catch (emailError) {
+        console.error(`⚠️ Failed to send approval email to ${user.email}:`, emailError.message);
+      }
+
+      // Create in-app notification
+      try {
+        await createNotification(
+          userId,
+          'approval',
+          '✅ Account Approved',
+          'Your account has been approved! You can now access all member features.',
+          null
+        );
+      } catch (notifError) {
+        console.error(`⚠️ Failed to create approval notification:`, notifError.message);
+      }
+    }
+
     return res.json({ message: `User ${status} successfully` });
   } catch (error) {
     console.error('Error updating user status:', error);
+    if (conn) conn.release();
     return res.status(500).json({ error: 'Failed to update user status' });
   }
 };

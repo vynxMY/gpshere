@@ -3,6 +3,7 @@
 // ============================================
 
 const pool = require('../config/database');
+const { sendNotificationEmail } = require('../utils/email');
 
 // Get all notifications for the current user
 const getNotifications = async (req, res) => {
@@ -135,9 +136,15 @@ const markAllAsRead = async (req, res) => {
 
 // Create notification (internal helper function)
 const createNotification = async (userId, type, title, message, relatedId = null) => {
+  let conn = null;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
     
+    // Get user email for sending notification email
+    const [users] = await conn.query('SELECT email, name FROM users WHERE id = ?', [userId]);
+    const user = users[0];
+    
+    // Create notification in database
     await conn.query(
       `INSERT INTO notifications (user_id, type, title, message, related_id, is_read)
        VALUES (?, ?, ?, ?, ?, FALSE)`,
@@ -145,8 +152,19 @@ const createNotification = async (userId, type, title, message, relatedId = null
     );
 
     conn.release();
+
+    // Send email notification (non-blocking - don't fail if email fails)
+    if (user && user.email) {
+      try {
+        await sendNotificationEmail(user.email, user.name || 'User', title, message, type);
+      } catch (emailError) {
+        console.error(`⚠️ Failed to send notification email to ${user.email}:`, emailError.message);
+        // Continue - notification is already saved in database
+      }
+    }
   } catch (error) {
     console.error('Error creating notification:', error);
+    if (conn) conn.release();
   }
 };
 
@@ -244,6 +262,14 @@ const notifyMembersAboutUpcomingEvents = async () => {
             [member.id, title, message, event.id]
           );
           totalNotifications++;
+          
+          // Send email notification (non-blocking)
+          try {
+            await sendNotificationEmail(member.email, member.name || 'Member', title, message, 'upcoming_event');
+          } catch (emailError) {
+            console.error(`⚠️ Failed to send notification email to ${member.email}:`, emailError.message);
+            // Continue - notification is already saved in database
+          }
         }
       }
     }
@@ -306,6 +332,16 @@ const createNotificationsForAllUsers = async (type, title, message, relatedId = 
           [user.id, type, title, message, relatedId]
         );
         successCount++;
+        
+        // Send email notification (non-blocking)
+        if (user.email) {
+          try {
+            await sendNotificationEmail(user.email, user.name || 'User', title, message, type);
+          } catch (emailError) {
+            console.error(`⚠️ Failed to send notification email to ${user.email}:`, emailError.message);
+            // Continue - notification is already saved in database
+          }
+        }
       } catch (insertError) {
         errorCount++;
         console.error(`❌ Failed to create notification for user ${user.id} (${user.email}):`, insertError.message);
