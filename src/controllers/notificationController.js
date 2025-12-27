@@ -301,16 +301,17 @@ const createNotificationsForAllUsers = async (type, title, message, relatedId = 
       throw tableError;
     }
     
-    // Fetch all users (or just members if type is 'event')
+    // Fetch all users (including pending/unapproved users)
+    // For events, we still notify only approved members, but for system/announcement notifications, notify ALL users
     let users;
-    if (type === 'event') {
-      // For events, notify all members
+    if (type === 'event' || type === 'upcoming_event') {
+      // For events, notify all approved members (they can participate)
       [users] = await conn.query(
-        "SELECT id, name, email, role FROM users WHERE role = 'member' AND status = 'approved'"
+        "SELECT id, name, email, role, status FROM users WHERE role = 'member' AND status = 'approved'"
       );
     } else {
-      // For other types, notify all users
-      [users] = await conn.query('SELECT id, name, email, role FROM users');
+      // For system notifications, announcements, and other types: notify ALL registered users (including pending)
+      [users] = await conn.query('SELECT id, name, email, role, status FROM users WHERE email IS NOT NULL AND email != ""');
     }
     
     if (users.length === 0) {
