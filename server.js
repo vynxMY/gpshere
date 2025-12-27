@@ -25,10 +25,13 @@ app.use(session({
   secret: process.env.JWT_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
+  name: 'gsphere.sid', // Custom session name
   cookie: { 
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-    sameSite: 'lax'
+    secure: false, // Render handles HTTPS termination, so we allow HTTP cookies
+    httpOnly: true, // Prevent XSS attacks
+    sameSite: 'lax', // Allow cookies on cross-site requests (for Render)
+    domain: undefined // Let browser set domain automatically
   }
 }));
 
