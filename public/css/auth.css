@@ -100,11 +100,14 @@
 .password-toggle .toggle-icon {
     position: absolute;
     right: 15px;
-    top: 50%;
+    top: 57px; /* Positions icon at center of input field (label ~24px + margin 8px + input padding-top 14px + half input height ~11px) */
     transform: translateY(-50%);
     cursor: pointer;
     color: var(--gray);
     font-size: 20px;
+    user-select: none;
+    pointer-events: auto;
+    z-index: 1;
 }
 
 .remember-forgot {
