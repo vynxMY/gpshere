@@ -665,9 +665,18 @@ textarea:focus {
    RESPONSIVE DESIGN
    ============================================ */
 @media (max-width: 768px) {
+    /* Navigation Bar */
     .navbar {
         flex-direction: column;
         padding: 15px 20px;
+    }
+
+    .navbar .logo {
+        font-size: 20px;
+    }
+
+    .navbar .logo img {
+        height: 40px !important;
     }
 
     .navbar .nav-links {
@@ -677,26 +686,180 @@ textarea:focus {
         margin-top: 15px;
     }
 
-    .hero h1 {
-        font-size: 32px;
-    }
-
-    .hero p {
+    .navbar .nav-links a {
+        padding: 12px;
+        text-align: center;
         font-size: 16px;
     }
 
-    .container {
-        padding: 20px 15px;
+    /* Hero Section */
+    .hero {
+        padding: 60px 20px !important;
     }
 
+    .hero h1 {
+        font-size: 28px !important;
+        line-height: 1.2;
+    }
+
+    .hero p {
+        font-size: 16px !important;
+        padding: 0 10px;
+    }
+
+    /* Containers & Cards */
+    .container {
+        padding: 20px 15px;
+        max-width: 100%;
+    }
+
+    .card {
+        padding: 20px 15px;
+        margin-bottom: 15px;
+    }
+
+    .card h3 {
+        font-size: 20px;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 12px 20px;
+        font-size: 15px;
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .btn-hero {
+        padding: 14px 28px !important;
+        font-size: 16px !important;
+        display: block;
+        width: 100%;
+        max-width: 280px;
+        margin: 10px auto !important;
+    }
+
+    /* Tables - Make scrollable on mobile */
     .table {
-        font-size: 14px;
+        font-size: 13px;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
+
+    .table thead,
+    .table tbody,
+    .table tr {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
     }
 
     .table th,
     .table td {
-        padding: 10px;
+        padding: 8px 5px;
+        word-wrap: break-word;
+        white-space: normal;
     }
+
+    /* Forms */
+    .form-control {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px 14px;
+    }
+
+    /* Images */
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* Footer */
+    footer {
+        padding: 40px 20px !important;
+        font-size: 14px;
+    }
+
+    footer img {
+        height: 60px !important;
+    }
+
+    /* Grid layouts - stack on mobile */
+    [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Text sizes */
+    h1 {
+        font-size: 28px !important;
+    }
+
+    h2 {
+        font-size: 24px !important;
+    }
+
+    h3 {
+        font-size: 20px !important;
+    }
+
+    /* Modals */
+    .modal-content {
+        width: 95% !important;
+        padding: 20px !important;
+        margin: 10px;
+    }
+}
+
+/* Extra small devices (phones in portrait) */
+@media (max-width: 480px) {
+    .navbar {
+        padding: 12px 15px;
+    }
+
+    .hero {
+        padding: 40px 15px !important;
+    }
+
+    .hero h1 {
+        font-size: 24px !important;
+    }
+
+    .hero p {
+        font-size: 14px !important;
+    }
+
+    .container {
+        padding: 15px 10px;
+    }
+
+    .card {
+        padding: 15px 12px;
+    }
+
+    .btn {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+
+    .table {
+        font-size: 12px;
+    }
+
+    .table th,
+    .table td {
+        padding: 6px 4px;
+    }
+}
+
+/* Prevent horizontal scroll */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 /* ============================================

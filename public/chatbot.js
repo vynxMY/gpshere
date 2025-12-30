@@ -37,6 +37,36 @@
     iframe.style.zIndex = "9998";
     iframe.style.display = "none";
     iframe.style.transition = "opacity 0.3s ease";
+    
+    // Mobile responsive styles
+    const mobileStyles = document.createElement("style");
+    mobileStyles.textContent = `
+        @media (max-width: 768px) {
+            #gps-chatbot-iframe {
+                width: calc(100% - 40px) !important;
+                right: 20px !important;
+                left: 20px !important;
+                height: calc(100vh - 100px) !important;
+                max-height: 500px !important;
+                bottom: 90px !important;
+            }
+        }
+        @media (max-width: 480px) {
+            #gps-chatbot-bubble {
+                width: 50px !important;
+                height: 50px !important;
+                bottom: 15px !important;
+                right: 15px !important;
+            }
+            #gps-chatbot-iframe {
+                width: calc(100% - 30px) !important;
+                right: 15px !important;
+                left: 15px !important;
+                bottom: 80px !important;
+            }
+        }
+    `;
+    document.head.appendChild(mobileStyles);
 
     document.body.appendChild(iframe);
 

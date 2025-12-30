@@ -358,15 +358,132 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .auth-container {
+        padding: 15px;
+        min-height: 100vh;
+    }
+
     .auth-box {
         padding: 30px 20px;
+        max-width: 100%;
+        border-radius: 15px;
     }
 
     .auth-header h1 {
-        font-size: 26px;
+        font-size: 24px;
+    }
+
+    .auth-header img {
+        max-width: 250px !important;
+    }
+
+    .auth-header p {
+        font-size: 14px;
+    }
+
+    .auth-tabs {
+        gap: 5px;
+    }
+
+    .auth-tab {
+        padding: 10px 8px;
+        font-size: 15px;
+    }
+
+    .form-group label {
+        font-size: 14px;
+    }
+
+    .form-control {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px 14px;
+    }
+
+    .password-toggle .toggle-icon {
+        top: 53px;
+        right: 12px;
     }
 
     .social-login {
         flex-direction: column;
+    }
+
+    .social-btn {
+        padding: 12px;
+        font-size: 14px;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 16px;
+    }
+
+    .remember-forgot {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    /* TAC Modal */
+    .tac-content {
+        width: 95% !important;
+        padding: 30px 20px !important;
+        margin: 10px;
+    }
+
+    .tac-input {
+        font-size: 20px;
+        letter-spacing: 8px;
+        padding: 12px;
+    }
+
+    /* Modal */
+    .modal-content {
+        width: 95% !important;
+        max-width: 95% !important;
+        padding: 20px !important;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .auth-box {
+        padding: 25px 15px;
+    }
+
+    .auth-header h1 {
+        font-size: 22px;
+    }
+
+    .auth-header img {
+        max-width: 200px !important;
+    }
+
+    .auth-tab {
+        font-size: 14px;
+        padding: 8px 6px;
+    }
+
+    .form-control {
+        padding: 10px 12px;
+    }
+
+    .btn {
+        padding: 12px;
+        font-size: 15px;
+    }
+}
+
+/* Prevent zoom on input focus (iOS) */
+@media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="tel"],
+    input[type="number"],
+    select,
+    textarea {
+        font-size: 16px !important;
     }
 }

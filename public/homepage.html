@@ -16,6 +16,149 @@
             background: linear-gradient(to bottom, #fdfcfb 0%, #e2d1c3 50%, #f8f9fa 100%);
             background-attachment: fixed;
         }
+        
+        /* Mobile responsive adjustments for homepage */
+        @media (max-width: 768px) {
+            /* Hero section */
+            .hero {
+                padding: 60px 15px !important;
+            }
+            
+            .hero h1 {
+                font-size: 32px !important;
+            }
+            
+            .hero p {
+                font-size: 18px !important;
+            }
+            
+            /* Navigation */
+            .navbar .logo img {
+                height: 40px !important;
+            }
+            
+            /* About section */
+            .card[style*="padding: 50px"] {
+                padding: 30px 20px !important;
+            }
+            
+            .card h2[style*="font-size: 32px"] {
+                font-size: 26px !important;
+            }
+            
+            .card p[style*="font-size: 18px"] {
+                font-size: 16px !important;
+            }
+            
+            /* Programs section */
+            h2[style*="font-size: 36px"] {
+                font-size: 28px !important;
+            }
+            
+            p[style*="font-size: 18px"] {
+                font-size: 16px !important;
+            }
+            
+            /* Icons */
+            div[style*="font-size: 42px"],
+            div[style*="font-size: 48px"] {
+                font-size: 36px !important;
+            }
+            
+            /* Mission/Vision */
+            h3[style*="font-size: 24px"] {
+                font-size: 20px !important;
+            }
+            
+            /* Footer */
+            footer h3[style*="font-size: 28px"] {
+                font-size: 24px !important;
+            }
+            
+            footer p[style*="font-size: 18px"] {
+                font-size: 16px !important;
+            }
+            
+            footer p[style*="font-size: 16px"] {
+                font-size: 14px !important;
+            }
+            
+            /* Buttons */
+            .btn-hero[style*="font-size: 18px"] {
+                font-size: 16px !important;
+                padding: 14px 30px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            /* Hero section */
+            .hero {
+                padding: 40px 12px !important;
+            }
+            
+            .hero h1 {
+                font-size: 24px !important;
+                margin-bottom: 10px !important;
+            }
+            
+            .hero p[style*="font-size: 24px"] {
+                font-size: 18px !important;
+            }
+            
+            .hero p[style*="font-size: 18px"] {
+                font-size: 14px !important;
+            }
+            
+            /* About section */
+            .card[style*="padding: 50px"] {
+                padding: 25px 15px !important;
+            }
+            
+            .card h2[style*="font-size: 32px"] {
+                font-size: 22px !important;
+            }
+            
+            /* Programs section */
+            h2[style*="font-size: 36px"] {
+                font-size: 24px !important;
+            }
+            
+            /* Icons */
+            div[style*="font-size: 42px"],
+            div[style*="font-size: 48px"] {
+                font-size: 32px !important;
+                margin-bottom: 10px !important;
+            }
+            
+            /* Mission/Vision */
+            h3[style*="font-size: 24px"] {
+                font-size: 18px !important;
+            }
+            
+            /* Footer */
+            footer {
+                padding: 30px 15px !important;
+            }
+            
+            footer h3[style*="font-size: 28px"] {
+                font-size: 20px !important;
+            }
+            
+            /* Buttons */
+            .btn-hero[style*="font-size: 18px"],
+            .btn[style*="font-size: 16px"] {
+                font-size: 15px !important;
+                padding: 12px 24px !important;
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+        
+        /* Ensure all images are responsive */
+        img {
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
