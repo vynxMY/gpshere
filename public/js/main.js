@@ -36,7 +36,26 @@ async function apiRequest(endpoint, method = 'GET', data = null, timeout = 30000
             timeoutPromise
         ]);
 
-        const result = await response.json();
+        // Check if response has content before trying to parse JSON
+        const contentType = response.headers.get('content-type');
+        const text = await response.text();
+        
+        let result;
+        if (contentType && contentType.includes('application/json') && text.trim()) {
+            try {
+                result = JSON.parse(text);
+            } catch (jsonError) {
+                console.error('Failed to parse JSON response:', jsonError);
+                console.error('Response text:', text);
+                throw new Error('Invalid response from server - received non-JSON data');
+            }
+        } else {
+            // Empty response or non-JSON response
+            if (response.ok && text.trim() === '') {
+                throw new Error('Empty response from server');
+            }
+            result = text ? { error: text } : { error: 'No response from server' };
+        }
 
         if (!response.ok) {
             throw new Error(result.error || result.details || 'Request failed');
