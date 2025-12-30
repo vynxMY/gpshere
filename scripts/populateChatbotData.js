@@ -307,4 +307,7 @@ async function populateChatbotData() {
   }
 }
 
-populateChatbotData();
+// Only run if this script is executed directly (not when required as a module)
+if (require.main === module) {
+  populateChatbotData();
+}

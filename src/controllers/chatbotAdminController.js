@@ -242,14 +242,47 @@ const toggleKnowledgeStatus = async (req, res) => {
 // Uses the same knowledge entries as scripts/populateChatbotData.js
 const populateChatbotKnowledge = async (req, res) => {
   try {
+    console.log('Starting chatbot knowledge population via API...');
+    
     // Import knowledge entries from the populate script
-    const { getKnowledgeEntries } = require('../../scripts/populateChatbotData');
+    let getKnowledgeEntries;
+    try {
+      const populateModule = require('../../scripts/populateChatbotData');
+      getKnowledgeEntries = populateModule.getKnowledgeEntries;
+      
+      if (typeof getKnowledgeEntries !== 'function') {
+        throw new Error('getKnowledgeEntries is not a function');
+      }
+    } catch (requireError) {
+      console.error('Error requiring populateChatbotData:', requireError);
+      return res.status(500).json({ 
+        error: 'Failed to load knowledge entries',
+        details: requireError.message,
+        stack: process.env.NODE_ENV === 'development' ? requireError.stack : undefined
+      });
+    }
+    
     const knowledgeEntries = getKnowledgeEntries();
+    
+    if (!Array.isArray(knowledgeEntries) || knowledgeEntries.length === 0) {
+      return res.status(500).json({ 
+        error: 'No knowledge entries found',
+        details: 'getKnowledgeEntries() returned empty or invalid data'
+      });
+    }
+    
+    console.log(`Processing ${knowledgeEntries.length} knowledge entries...`);
     
     let inserted = 0;
     let updated = 0;
 
     for (const knowledge of knowledgeEntries) {
+      // Validate required fields
+      if (!knowledge.category || !knowledge.keywords || !knowledge.response) {
+        console.warn(`Skipping invalid entry: ${knowledge.category || 'unknown'}`);
+        continue;
+      }
+      
       // Check if entry exists by category
       const [existing] = await pool.query(
         "SELECT id FROM chatbot_knowledge WHERE category = ?",
@@ -260,18 +293,22 @@ const populateChatbotKnowledge = async (req, res) => {
         // Update existing entry
         await pool.query(
           "UPDATE chatbot_knowledge SET keywords = ?, response = ?, suggestions = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ?",
-          [knowledge.keywords, knowledge.response, knowledge.suggestions, knowledge.priority, knowledge.category]
+          [knowledge.keywords, knowledge.response, knowledge.suggestions || '', knowledge.priority || 0, knowledge.category]
         );
         updated++;
+        console.log(`Updated: ${knowledge.category}`);
       } else {
         // Insert new entry
         await pool.query(
           "INSERT INTO chatbot_knowledge (category, keywords, response, suggestions, priority) VALUES (?, ?, ?, ?, ?)",
-          [knowledge.category, knowledge.keywords, knowledge.response, knowledge.suggestions, knowledge.priority]
+          [knowledge.category, knowledge.keywords, knowledge.response, knowledge.suggestions || '', knowledge.priority || 0]
         );
         inserted++;
+        console.log(`Inserted: ${knowledge.category}`);
       }
     }
+
+    console.log(`Population complete! Inserted: ${inserted}, Updated: ${updated}`);
 
     return res.json({
       success: true,
@@ -282,10 +319,20 @@ const populateChatbotKnowledge = async (req, res) => {
     });
   } catch (error) {
     console.error('Error populating chatbot knowledge:', error);
-    return res.status(500).json({ 
-      error: 'Failed to populate chatbot knowledge',
-      details: error.message 
-    });
+    console.error('Error stack:', error.stack);
+    
+    // Ensure we always return valid JSON
+    try {
+      return res.status(500).json({ 
+        error: 'Failed to populate chatbot knowledge',
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    } catch (jsonError) {
+      // Fallback if JSON.stringify fails
+      console.error('Failed to send JSON response:', jsonError);
+      return res.status(500).send('Internal server error');
+    }
   }
 };
 
