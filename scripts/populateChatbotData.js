@@ -7,34 +7,9 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-async function populateChatbotData() {
-  let conn;
-  try {
-    console.log('Starting chatbot knowledge population...');
-    
-    // Connect to MySQL
-    conn = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'gpsphere_db',
-      port: parseInt(process.env.DB_PORT || '3306')
-    });
-
-    console.log('✅ Connected to database');
-
-    // Check if table exists
-    const [tables] = await conn.query(
-      "SHOW TABLES LIKE 'chatbot_knowledge'"
-    );
-
-    if (tables.length === 0) {
-      console.log('❌ chatbot_knowledge table does not exist. Please run initDb.js first.');
-      process.exit(1);
-    }
-
-    // Define knowledge entries based on actual system environment
-    const knowledgeEntries = [
+// Extract knowledge entries function (used by both script and API)
+function getKnowledgeEntries() {
+  return [
       {
         category: 'greeting',
         keywords: 'hi,hello,hey,greetings,good morning,good afternoon,good evening,hai,salam',
@@ -253,6 +228,39 @@ async function populateChatbotData() {
         priority: 6
       }
     ];
+
+    return knowledgeEntries;
+}
+
+// Export function for use by API endpoint
+module.exports.getKnowledgeEntries = getKnowledgeEntries;
+
+async function populateChatbotData() {
+  const knowledgeEntries = getKnowledgeEntries();
+  let conn;
+  try {
+    console.log('Starting chatbot knowledge population...');
+    
+    // Connect to MySQL
+    conn = await mysql.createConnection({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'gpsphere_db',
+      port: parseInt(process.env.DB_PORT || '3306')
+    });
+
+    console.log('✅ Connected to database');
+
+    // Check if table exists
+    const [tables] = await conn.query(
+      "SHOW TABLES LIKE 'chatbot_knowledge'"
+    );
+
+    if (tables.length === 0) {
+      console.log('❌ chatbot_knowledge table does not exist. Please run initDb.js first.');
+      process.exit(1);
+    }
 
     let inserted = 0;
     let updated = 0;

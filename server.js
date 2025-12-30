@@ -48,6 +48,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const eventRoutes = require('./src/routes/eventRoutes');
 const chatbotRoutes = require('./src/routes/chatbotRoutes');
+const chatbotAdminRoutes = require('./src/routes/chatbotAdminRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 
 // Use routes
@@ -55,6 +56,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/admin/chatbot', chatbotAdminRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint

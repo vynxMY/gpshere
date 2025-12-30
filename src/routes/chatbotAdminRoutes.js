@@ -11,7 +11,8 @@ const {
   createKnowledge,
   updateKnowledge,
   deleteKnowledge,
-  toggleKnowledgeStatus
+  toggleKnowledgeStatus,
+  populateChatbotKnowledge
 } = require('../controllers/chatbotAdminController');
 
 const router = express.Router();
@@ -23,11 +24,14 @@ router.use(checkRole(['admin']));
 // GET /api/admin/chatbot - Get all chatbot knowledge entries
 router.get('/', getAllKnowledge);
 
-// GET /api/admin/chatbot/:id - Get single knowledge entry
-router.get('/:id', getKnowledgeById);
+// POST /api/admin/chatbot/populate - Populate/update chatbot knowledge from predefined entries (must come before /:id)
+router.post('/populate', populateChatbotKnowledge);
 
 // POST /api/admin/chatbot - Create new knowledge entry
 router.post('/', createKnowledge);
+
+// GET /api/admin/chatbot/:id - Get single knowledge entry
+router.get('/:id', getKnowledgeById);
 
 // PUT /api/admin/chatbot/:id - Update knowledge entry
 router.put('/:id', updateKnowledge);

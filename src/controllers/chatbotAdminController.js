@@ -238,12 +238,64 @@ const toggleKnowledgeStatus = async (req, res) => {
   }
 };
 
+// Populate chatbot knowledge from predefined entries
+// Uses the same knowledge entries as scripts/populateChatbotData.js
+const populateChatbotKnowledge = async (req, res) => {
+  try {
+    // Import knowledge entries from the populate script
+    const { getKnowledgeEntries } = require('../../scripts/populateChatbotData');
+    const knowledgeEntries = getKnowledgeEntries();
+    
+    let inserted = 0;
+    let updated = 0;
+
+    for (const knowledge of knowledgeEntries) {
+      // Check if entry exists by category
+      const [existing] = await pool.query(
+        "SELECT id FROM chatbot_knowledge WHERE category = ?",
+        [knowledge.category]
+      );
+
+      if (existing.length > 0) {
+        // Update existing entry
+        await pool.query(
+          "UPDATE chatbot_knowledge SET keywords = ?, response = ?, suggestions = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE category = ?",
+          [knowledge.keywords, knowledge.response, knowledge.suggestions, knowledge.priority, knowledge.category]
+        );
+        updated++;
+      } else {
+        // Insert new entry
+        await pool.query(
+          "INSERT INTO chatbot_knowledge (category, keywords, response, suggestions, priority) VALUES (?, ?, ?, ?, ?)",
+          [knowledge.category, knowledge.keywords, knowledge.response, knowledge.suggestions, knowledge.priority]
+        );
+        inserted++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Chatbot knowledge populated successfully',
+      inserted,
+      updated,
+      total: knowledgeEntries.length
+    });
+  } catch (error) {
+    console.error('Error populating chatbot knowledge:', error);
+    return res.status(500).json({ 
+      error: 'Failed to populate chatbot knowledge',
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   getAllKnowledge,
   getKnowledgeById,
   createKnowledge,
   updateKnowledge,
   deleteKnowledge,
-  toggleKnowledgeStatus
+  toggleKnowledgeStatus,
+  populateChatbotKnowledge
 };
 
