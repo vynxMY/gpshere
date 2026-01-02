@@ -76,17 +76,26 @@ const calculateMatchScore = (message, keyword) => {
   
   // For multi-word phrases, check phrase matching first
   if (isPhrase(lowerKeyword)) {
+    // Normalize both message and keyword (remove extra spaces)
+    const normalizedMessage = lowerMessage.replace(/\s+/g, ' ').trim();
+    const normalizedKeyword = lowerKeyword.replace(/\s+/g, ' ').trim();
+    
+    // Exact phrase match - message equals keyword exactly (after normalization)
+    if (normalizedMessage === normalizedKeyword) {
+      return 100; // Perfect match
+    }
+    
     // Exact phrase match - message contains the exact phrase (case-insensitive, with word boundaries)
-    const escapedKeyword = lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Match phrase with word boundaries on both sides
     const phraseRegex = new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i');
-    if (phraseRegex.test(lowerMessage)) {
-      return 98;
+    if (phraseRegex.test(normalizedMessage)) {
+      return 98; // Very high score for exact phrase match
     }
     
     // Phrase appears in message (all words present in order, consecutive or near)
-    const keywordWords = lowerKeyword.split(/\s+/).map(w => w.trim()).filter(w => w.length > 0);
-    const messageWords = extractWords(lowerMessage);
+    const keywordWords = normalizedKeyword.split(/\s+/).map(w => w.trim()).filter(w => w.length > 0);
+    const messageWords = extractWords(normalizedMessage);
     
     // Special case: if message words exactly match keyword words in order
     if (messageWords.length === keywordWords.length) {
@@ -238,6 +247,7 @@ const findMatchingKnowledge = async (message) => {
     let bestScore = 0;
 
     // First pass: Check for exact keyword matches (highest priority)
+    // This must happen BEFORE any scoring to ensure exact matches always win
     for (const entry of knowledgeEntries) {
       if (!entry.keywords) continue;
       
@@ -245,13 +255,22 @@ const findMatchingKnowledge = async (message) => {
       
       // Check for exact match first (both full message match and phrase match)
       for (const keyword of keywords) {
-        // Exact match (message equals keyword)
+        // Exact match (message equals keyword exactly)
         if (lowerMessage === keyword) {
           return entry;
         }
         
-        // For phrases, also check if message contains the exact phrase with word boundaries
+        // For phrases, check if message is exactly the phrase (after normalization)
         if (isPhrase(keyword)) {
+          // Normalize both: remove extra spaces, trim
+          const normalizedMessage = lowerMessage.replace(/\s+/g, ' ').trim();
+          const normalizedKeyword = keyword.replace(/\s+/g, ' ').trim();
+          
+          if (normalizedMessage === normalizedKeyword) {
+            return entry;
+          }
+          
+          // Also check if message contains the exact phrase with word boundaries
           const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const phraseRegex = new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i');
           if (phraseRegex.test(lowerMessage)) {
@@ -262,6 +281,10 @@ const findMatchingKnowledge = async (message) => {
     }
 
     // Second pass: Check each knowledge entry for keyword matches
+    // Track perfect matches separately to ensure they always win
+    let perfectMatch = null;
+    let perfectMatchScore = 0;
+    
     for (const entry of knowledgeEntries) {
       if (!entry.keywords) continue;
       
@@ -287,15 +310,26 @@ const findMatchingKnowledge = async (message) => {
       
       // If we found matches, calculate enhanced score
       if (entryBestScore > 0) {
+        // PERFECT MATCHES (95-100) always win - return immediately
+        if (entryBestScore >= 95) {
+          // Don't add any bonuses - perfect matches should win as-is
+          // Track the best perfect match (100 > 99 > 98 > 95)
+          if (!perfectMatch || entryBestScore > perfectMatchScore) {
+            perfectMatch = entry;
+            perfectMatchScore = entryBestScore;
+          }
+          // If we find a perfect 100, we can return immediately
+          if (entryBestScore === 100) {
+            return entry;
+          }
+          continue; // Skip to next entry, but remember this perfect match
+        }
+        
         // Base score: best single keyword match
         let finalScore = entryBestScore;
         
-        // For very high scores (exact/perfect matches), prioritize them heavily
-        if (entryBestScore >= 95) {
-          // Perfect matches (95-100) get highest priority - use score as-is with small boost
-          finalScore = entryBestScore + 10; // Small boost to ensure perfect matches win
-        } else if (entryBestScore >= 90) {
-          // Near-exact matches (90-94) get high priority
+        // For near-exact matches (90-94), give small boost
+        if (entryBestScore >= 90) {
           finalScore = entryBestScore + 5; // Small boost
         } else {
           // For other matches, apply normal scoring
@@ -324,12 +358,17 @@ const findMatchingKnowledge = async (message) => {
           }
         }
         
-        // Only update if this is a better match
+        // Only update if this is a better match (and not a perfect match)
         if (finalScore > bestScore) {
           bestScore = finalScore;
           bestMatch = entry;
         }
       }
+    }
+    
+    // If we found a perfect match, return it (it always wins)
+    if (perfectMatch) {
+      return perfectMatch;
     }
 
     // Lower threshold for better matching (was 30, now 25 to catch more relevant matches)
