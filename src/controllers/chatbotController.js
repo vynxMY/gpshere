@@ -125,41 +125,41 @@ const calculateMatchScore = (message, keyword) => {
   // Single word matching
   const messageWords = extractWords(lowerMessage);
   const keywordWords = lowerKeyword.split(/\s+/);
-  const keyword = keywordWords[0]; // For single word keywords
+  const singleKeyword = keywordWords[0]; // For single word keywords
   
   // Word boundary matches (exact word match) - highest for single words
-  const wordBoundaryRegex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const wordBoundaryRegex = new RegExp(`\\b${singleKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   if (wordBoundaryRegex.test(lowerMessage)) {
     return 90;
   }
   
   // Check if keyword is a complete word in message
-  if (messageWords.includes(keyword)) {
+  if (messageWords.includes(singleKeyword)) {
     return 85;
   }
   
   // Starts with keyword
-  if (lowerMessage.startsWith(keyword + ' ') || lowerMessage.startsWith(keyword + ',')) {
+  if (lowerMessage.startsWith(singleKeyword + ' ') || lowerMessage.startsWith(singleKeyword + ',')) {
     return 80;
   }
   
   // Ends with keyword
-  if (lowerMessage.endsWith(' ' + keyword) || lowerMessage.endsWith(',' + keyword)) {
+  if (lowerMessage.endsWith(' ' + singleKeyword) || lowerMessage.endsWith(',' + singleKeyword)) {
     return 75;
   }
   
   // Contains keyword as whole word (with spaces)
-  if (lowerMessage.includes(' ' + keyword + ' ') || 
-      lowerMessage.includes(' ' + keyword + ',') ||
-      lowerMessage.includes(',' + keyword + ' ')) {
+  if (lowerMessage.includes(' ' + singleKeyword + ' ') || 
+      lowerMessage.includes(' ' + singleKeyword + ',') ||
+      lowerMessage.includes(',' + singleKeyword + ' ')) {
     return 70;
   }
   
   // Fuzzy matching for typos and variations
   let bestSimilarity = 0;
   for (const word of messageWords) {
-    if (word.length >= 3 && keyword.length >= 3) {
-      const similarity = calculateSimilarity(word, keyword);
+    if (word.length >= 3 && singleKeyword.length >= 3) {
+      const similarity = calculateSimilarity(word, singleKeyword);
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
       }
@@ -173,19 +173,19 @@ const calculateMatchScore = (message, keyword) => {
   
   // Check if keyword is contained in any word (substring match)
   for (const word of messageWords) {
-    if (word.includes(keyword)) {
+    if (word.includes(singleKeyword)) {
       // Longer keywords get higher score
-      return Math.min(60, 40 + (keyword.length * 2));
+      return Math.min(60, 40 + (singleKeyword.length * 2));
     }
-    if (keyword.includes(word) && word.length >= 3) {
+    if (singleKeyword.includes(word) && word.length >= 3) {
       return Math.min(55, 30 + (word.length * 2));
     }
   }
   
   // Partial match (contains keyword anywhere)
-  if (lowerMessage.includes(keyword)) {
+  if (lowerMessage.includes(singleKeyword)) {
     // Longer keywords get higher score for partial matches
-    return Math.min(50, 20 + (keyword.length * 2));
+    return Math.min(50, 20 + (singleKeyword.length * 2));
   }
   
   return 0;
