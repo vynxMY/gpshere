@@ -254,35 +254,44 @@ document.addEventListener('click', (e) => {
 });
 
 // ============================================
-// DATE/TIME FORMATTING
+// DATE/TIME FORMATTING (DD/MM/YYYY format)
 // ============================================
 
 function formatDate(dateString) {
+    if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
+    if (isNaN(date.getTime())) return '-';
+    
+    // Format as DD/MM/YYYY
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
 }
 
 function formatDateTime(dateString) {
+    if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    if (isNaN(date.getTime())) return '-';
+    
+    // Format as DD/MM/YYYY HH:MM
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 function formatTime(dateString) {
+    if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    if (isNaN(date.getTime())) return '-';
+    
+    // Format as HH:MM
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
 }
 
 // ============================================
