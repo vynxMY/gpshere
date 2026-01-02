@@ -3,50 +3,195 @@
 // ============================================
 // Enhanced chatbot with AI-like responses and conversation handling
 // Now uses database-backed knowledge with fallback to hardcoded responses
+// Enhanced with improved matching algorithm for better accuracy
 
 const pool = require('../config/database');
 
-// Helper function to calculate match score for a keyword
+// Helper function to calculate Levenshtein distance (for fuzzy matching)
+const levenshteinDistance = (str1, str2) => {
+  const matrix = [];
+  const len1 = str1.length;
+  const len2 = str2.length;
+
+  if (len1 === 0) return len2;
+  if (len2 === 0) return len1;
+
+  for (let i = 0; i <= len2; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= len1; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= len2; i++) {
+    for (let j = 1; j <= len1; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[len2][len1];
+};
+
+// Helper function to calculate similarity percentage
+const calculateSimilarity = (str1, str2) => {
+  const maxLen = Math.max(str1.length, str2.length);
+  if (maxLen === 0) return 100;
+  const distance = levenshteinDistance(str1, str2);
+  return ((maxLen - distance) / maxLen) * 100;
+};
+
+// Helper function to extract words from message
+const extractWords = (message) => {
+  return message.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 0);
+};
+
+// Helper function to check if keyword is a phrase (multiple words)
+const isPhrase = (keyword) => {
+  return keyword.trim().split(/\s+/).length > 1;
+};
+
+// Helper function to calculate match score for a keyword (enhanced version)
 const calculateMatchScore = (message, keyword) => {
   const lowerMessage = message.toLowerCase().trim();
   const lowerKeyword = keyword.toLowerCase().trim();
+  
+  if (!lowerKeyword || lowerKeyword.length === 0) return 0;
   
   // Exact match gets highest score
   if (lowerMessage === lowerKeyword) {
     return 100;
   }
   
-  // Word boundary matches (exact word match)
-  const wordBoundaryRegex = new RegExp(`\\b${lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  // For multi-word phrases, check phrase matching first
+  if (isPhrase(lowerKeyword)) {
+    // Exact phrase match (word boundary)
+    const phraseRegex = new RegExp(`\\b${lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (phraseRegex.test(lowerMessage)) {
+      return 95;
+    }
+    
+    // Phrase appears in message (all words present in order)
+    const keywordWords = lowerKeyword.split(/\s+/);
+    const messageWords = extractWords(lowerMessage);
+    
+    // Check if all keyword words appear in message in order
+    let keywordIndex = 0;
+    let foundInOrder = true;
+    for (let i = 0; i < messageWords.length && keywordIndex < keywordWords.length; i++) {
+      if (messageWords[i] === keywordWords[keywordIndex] || 
+          messageWords[i].includes(keywordWords[keywordIndex]) ||
+          keywordWords[keywordIndex].includes(messageWords[i])) {
+        keywordIndex++;
+      }
+    }
+    
+    if (keywordIndex === keywordWords.length) {
+      // All words found in order - high score
+      return 85;
+    }
+    
+    // Check if all words are present (not necessarily in order)
+    const allWordsPresent = keywordWords.every(kw => 
+      messageWords.some(mw => mw === kw || mw.includes(kw) || kw.includes(mw))
+    );
+    
+    if (allWordsPresent) {
+      return 75;
+    }
+    
+    // Partial phrase match
+    const phraseWordsFound = keywordWords.filter(kw => 
+      messageWords.some(mw => mw === kw || mw.includes(kw) || kw.includes(mw))
+    ).length;
+    
+    if (phraseWordsFound > 0) {
+      // Score based on how many words matched
+      return (phraseWordsFound / keywordWords.length) * 60;
+    }
+  }
+  
+  // Single word matching
+  const messageWords = extractWords(lowerMessage);
+  const keywordWords = lowerKeyword.split(/\s+/);
+  const keyword = keywordWords[0]; // For single word keywords
+  
+  // Word boundary matches (exact word match) - highest for single words
+  const wordBoundaryRegex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   if (wordBoundaryRegex.test(lowerMessage)) {
-    return 80;
+    return 90;
+  }
+  
+  // Check if keyword is a complete word in message
+  if (messageWords.includes(keyword)) {
+    return 85;
   }
   
   // Starts with keyword
-  if (lowerMessage.startsWith(lowerKeyword + ' ')) {
-    return 70;
+  if (lowerMessage.startsWith(keyword + ' ') || lowerMessage.startsWith(keyword + ',')) {
+    return 80;
   }
   
   // Ends with keyword
-  if (lowerMessage.endsWith(' ' + lowerKeyword)) {
-    return 60;
+  if (lowerMessage.endsWith(' ' + keyword) || lowerMessage.endsWith(',' + keyword)) {
+    return 75;
   }
   
   // Contains keyword as whole word (with spaces)
-  if (lowerMessage.includes(' ' + lowerKeyword + ' ')) {
-    return 50;
+  if (lowerMessage.includes(' ' + keyword + ' ') || 
+      lowerMessage.includes(' ' + keyword + ',') ||
+      lowerMessage.includes(',' + keyword + ' ')) {
+    return 70;
+  }
+  
+  // Fuzzy matching for typos and variations
+  let bestSimilarity = 0;
+  for (const word of messageWords) {
+    if (word.length >= 3 && keyword.length >= 3) {
+      const similarity = calculateSimilarity(word, keyword);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+      }
+    }
+  }
+  
+  // If similarity is high enough (>= 80%), consider it a match
+  if (bestSimilarity >= 80) {
+    return Math.min(65, bestSimilarity * 0.8);
+  }
+  
+  // Check if keyword is contained in any word (substring match)
+  for (const word of messageWords) {
+    if (word.includes(keyword)) {
+      // Longer keywords get higher score
+      return Math.min(60, 40 + (keyword.length * 2));
+    }
+    if (keyword.includes(word) && word.length >= 3) {
+      return Math.min(55, 30 + (word.length * 2));
+    }
   }
   
   // Partial match (contains keyword anywhere)
-  if (lowerMessage.includes(lowerKeyword)) {
+  if (lowerMessage.includes(keyword)) {
     // Longer keywords get higher score for partial matches
-    return Math.min(40, lowerKeyword.length * 2);
+    return Math.min(50, 20 + (keyword.length * 2));
   }
   
   return 0;
 };
 
-// Helper function to find matching knowledge from database
+// Helper function to find matching knowledge from database (enhanced with multi-keyword scoring)
 const findMatchingKnowledge = async (message) => {
   try {
     // Get all active knowledge entries, ordered by priority
@@ -68,19 +213,52 @@ const findMatchingKnowledge = async (message) => {
       
       const keywords = entry.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
       
-      // Check each keyword and find the best match score for this entry
+      if (keywords.length === 0) continue;
+      
+      // Enhanced scoring: consider multiple keyword matches
+      const keywordScores = [];
       let entryBestScore = 0;
+      let matchingKeywordsCount = 0;
+      
       for (const keyword of keywords) {
         const score = calculateMatchScore(lowerMessage, keyword);
-        if (score > entryBestScore) {
-          entryBestScore = score;
+        if (score > 0) {
+          keywordScores.push(score);
+          matchingKeywordsCount++;
+          if (score > entryBestScore) {
+            entryBestScore = score;
+          }
         }
       }
       
-      // If we found a match, consider priority in the final score
+      // If we found matches, calculate enhanced score
       if (entryBestScore > 0) {
-        // Combine match score with priority (priority adds up to 10 points)
-        const finalScore = entryBestScore + (entry.priority || 0);
+        // Base score: best single keyword match
+        let finalScore = entryBestScore;
+        
+        // Bonus for multiple keyword matches (indicates stronger relevance)
+        if (matchingKeywordsCount > 1) {
+          // Calculate average of top matches
+          const topScores = keywordScores.sort((a, b) => b - a).slice(0, Math.min(3, matchingKeywordsCount));
+          const avgScore = topScores.reduce((sum, s) => sum + s, 0) / topScores.length;
+          
+          // Combine best match with average (weighted: 70% best, 30% average)
+          finalScore = (entryBestScore * 0.7) + (avgScore * 0.3);
+          
+          // Additional bonus for multiple matches (up to 15 points)
+          const multiMatchBonus = Math.min(15, matchingKeywordsCount * 3);
+          finalScore += multiMatchBonus;
+        }
+        
+        // Priority boost (priority adds up to 20 points, scaled)
+        const priorityBoost = Math.min(20, (entry.priority || 0) * 2);
+        finalScore += priorityBoost;
+        
+        // Bonus for longer, more specific keywords (indicates better match)
+        const avgKeywordLength = keywords.reduce((sum, k) => sum + k.length, 0) / keywords.length;
+        if (avgKeywordLength > 5) {
+          finalScore += Math.min(5, (avgKeywordLength - 5) * 0.5);
+        }
         
         // Only update if this is a better match
         if (finalScore > bestScore) {
@@ -90,8 +268,9 @@ const findMatchingKnowledge = async (message) => {
       }
     }
 
-    // Only return if we have a reasonable match (score > 30)
-    return bestScore > 30 ? bestMatch : null;
+    // Lower threshold for better matching (was 30, now 25 to catch more relevant matches)
+    // But require at least a decent match quality
+    return bestScore > 25 ? bestMatch : null;
   } catch (error) {
     console.error('Error fetching chatbot knowledge:', error);
     return null;
@@ -208,8 +387,16 @@ const getChatbotResponse = async (req, res) => {
     let response = '';
     let suggestions = [];
 
-    // Special handling for events - check knowledge base first, then fetch real events
-    const isEventQuery = lowerMessage.match(/\b(event|events|activities|upcoming|what events|event schedule)\b/i);
+    // Enhanced event query detection - more patterns
+    const eventPatterns = [
+      /\b(event|events|activity|activities)\b/i,
+      /\b(upcoming|coming|scheduled|available)\s+(event|events|activity|activities)\b/i,
+      /\b(what|which|show|list|tell me about)\s+(event|events|activity|activities)\b/i,
+      /\b(event|activity)\s+(schedule|list|calendar|info|information)\b/i,
+      /\b(join|participate|apply)\s+(to|for)\s+(event|events|activity|activities)\b/i
+    ];
+    
+    const isEventQuery = eventPatterns.some(pattern => pattern.test(lowerMessage));
     
     if (isEventQuery) {
       // First try knowledge base for event-related responses
