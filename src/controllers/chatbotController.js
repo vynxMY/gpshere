@@ -7,6 +7,17 @@
 
 const pool = require('../config/database');
 
+// Helper function to format date as DD/MM/YYYY
+const formatDateDDMMYYYY = (dateString) => {
+  if (!dateString) return 'TBA';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'TBA';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 // Helper function to calculate Levenshtein distance (for fuzzy matching)
 const levenshteinDistance = (str1, str2) => {
   const matrix = [];
@@ -538,7 +549,7 @@ const getChatbotResponse = async (req, res) => {
             // Use real events data
             response = '📅 **Upcoming Events:**\n\n';
             events.forEach((event, index) => {
-              const date = event.event_date ? new Date(event.event_date).toLocaleDateString() : 'TBA';
+              const date = formatDateDDMMYYYY(event.event_date);
               response += `${index + 1}. **${event.event_name}**\n`;
               if (event.description) response += `   ${event.description.substring(0, 100)}...\n`;
               response += `   📍 ${event.location || 'TBA'}\n`;
@@ -586,7 +597,7 @@ const getChatbotResponse = async (req, res) => {
           if (events && events.length > 0) {
             response = '📅 **Upcoming Events:**\n\n';
             events.forEach((event, index) => {
-              const date = event.event_date ? new Date(event.event_date).toLocaleDateString() : 'TBA';
+              const date = formatDateDDMMYYYY(event.event_date);
               response += `${index + 1}. **${event.event_name}**\n`;
               if (event.description) response += `   ${event.description.substring(0, 100)}...\n`;
               response += `   📍 ${event.location || 'TBA'}\n`;
