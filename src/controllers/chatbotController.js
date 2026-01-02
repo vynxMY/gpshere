@@ -103,6 +103,15 @@ const calculateMatchScore = (message, keyword) => {
       if (exactMatch) {
         return 99; // Very high score for exact word sequence match
       }
+      
+      // Check for word order variation (same words, different order)
+      // Sort both arrays and compare - if they match, it's the same phrase
+      const sortedMessageWords = [...messageWords].sort();
+      const sortedKeywordWords = [...keywordWords].sort();
+      const wordOrderMatch = sortedMessageWords.every((mw, idx) => mw === sortedKeywordWords[idx]);
+      if (wordOrderMatch) {
+        return 95; // Very high score for word order variation (e.g., "product comparison" = "compare products")
+      }
     }
     
     // Check if all keyword words appear in message in order (consecutive or near)
@@ -128,13 +137,15 @@ const calculateMatchScore = (message, keyword) => {
       return 92;
     }
     
-    // Check if all words are present (not necessarily in order)
+    // Check if all words are present (not necessarily in order) - this handles word order variations
     const allWordsPresent = keywordWords.every(kw => 
       messageWords.some(mw => mw === kw)
     );
     
     if (allWordsPresent) {
-      return 80;
+      // If all words match but in different order, still give high score
+      // This handles cases like "product comparison" matching "compare products"
+      return 85; // Increased from 80 to give better score for word order variations
     }
     
     // Partial phrase match - check how many words match exactly
@@ -270,10 +281,20 @@ const findMatchingKnowledge = async (message) => {
             return entry;
           }
           
-          // Also check if message contains the exact phrase with word boundaries
+          // Check if message contains the exact phrase with word boundaries
           const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const phraseRegex = new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i');
           if (phraseRegex.test(lowerMessage)) {
+            return entry;
+          }
+          
+          // Check for word order variations (e.g., "product comparison" = "compare products")
+          const keywordWords = normalizedKeyword.split(/\s+/).sort();
+          const messageWords = normalizedMessage.split(/\s+/).sort();
+          
+          // If sorted words match exactly, it's the same phrase in different order
+          if (keywordWords.length === messageWords.length && 
+              keywordWords.every((kw, idx) => kw === messageWords[idx])) {
             return entry;
           }
         }
