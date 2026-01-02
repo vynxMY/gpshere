@@ -69,60 +69,90 @@ const calculateMatchScore = (message, keyword) => {
   
   if (!lowerKeyword || lowerKeyword.length === 0) return 0;
   
-  // Exact match gets highest score
+  // Exact match gets highest score (works for both single words and phrases)
   if (lowerMessage === lowerKeyword) {
     return 100;
   }
   
   // For multi-word phrases, check phrase matching first
   if (isPhrase(lowerKeyword)) {
-    // Exact phrase match (word boundary)
-    const phraseRegex = new RegExp(`\\b${lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    // Exact phrase match - message contains the exact phrase (case-insensitive, with word boundaries)
+    const escapedKeyword = lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match phrase with word boundaries on both sides
+    const phraseRegex = new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i');
     if (phraseRegex.test(lowerMessage)) {
-      return 95;
+      return 98;
     }
     
-    // Phrase appears in message (all words present in order)
-    const keywordWords = lowerKeyword.split(/\s+/);
+    // Phrase appears in message (all words present in order, consecutive or near)
+    const keywordWords = lowerKeyword.split(/\s+/).map(w => w.trim()).filter(w => w.length > 0);
     const messageWords = extractWords(lowerMessage);
     
-    // Check if all keyword words appear in message in order
+    // Special case: if message words exactly match keyword words in order
+    if (messageWords.length === keywordWords.length) {
+      const exactMatch = messageWords.every((mw, idx) => mw === keywordWords[idx]);
+      if (exactMatch) {
+        return 99; // Very high score for exact word sequence match
+      }
+    }
+    
+    // Check if all keyword words appear in message in order (consecutive or near)
     let keywordIndex = 0;
-    let foundInOrder = true;
+    let lastMatchIndex = -1;
     for (let i = 0; i < messageWords.length && keywordIndex < keywordWords.length; i++) {
-      if (messageWords[i] === keywordWords[keywordIndex] || 
-          messageWords[i].includes(keywordWords[keywordIndex]) ||
-          keywordWords[keywordIndex].includes(messageWords[i])) {
-        keywordIndex++;
+      if (messageWords[i] === keywordWords[keywordIndex]) {
+        // Exact word match
+        if (keywordIndex === 0 || i === lastMatchIndex + 1) {
+          // First word or consecutive match
+          keywordIndex++;
+          lastMatchIndex = i;
+        } else if (i - lastMatchIndex <= 2) {
+          // Words are close together (within 2 words)
+          keywordIndex++;
+          lastMatchIndex = i;
+        }
       }
     }
     
     if (keywordIndex === keywordWords.length) {
-      // All words found in order - high score
-      return 85;
+      // All words found in order - very high score
+      return 92;
     }
     
     // Check if all words are present (not necessarily in order)
     const allWordsPresent = keywordWords.every(kw => 
-      messageWords.some(mw => mw === kw || mw.includes(kw) || kw.includes(mw))
+      messageWords.some(mw => mw === kw)
     );
     
     if (allWordsPresent) {
-      return 75;
+      return 80;
     }
     
-    // Partial phrase match
-    const phraseWordsFound = keywordWords.filter(kw => 
-      messageWords.some(mw => mw === kw || mw.includes(kw) || kw.includes(mw))
+    // Partial phrase match - check how many words match exactly
+    const exactMatches = keywordWords.filter(kw => 
+      messageWords.some(mw => mw === kw)
     ).length;
     
-    if (phraseWordsFound > 0) {
-      // Score based on how many words matched
-      return (phraseWordsFound / keywordWords.length) * 60;
+    if (exactMatches > 0) {
+      // Score based on how many words matched exactly
+      const matchRatio = exactMatches / keywordWords.length;
+      return 60 + (matchRatio * 20); // 60-80 range
     }
+    
+    // Very partial match - some words similar
+    const similarMatches = keywordWords.filter(kw => 
+      messageWords.some(mw => mw.includes(kw) || kw.includes(mw))
+    ).length;
+    
+    if (similarMatches > 0) {
+      return (similarMatches / keywordWords.length) * 50;
+    }
+    
+    // No phrase match found, return 0 (don't continue to single word matching for phrases)
+    return 0;
   }
   
-  // Single word matching
+  // Single word matching (only for single-word keywords)
   const messageWords = extractWords(lowerMessage);
   const keywordWords = lowerKeyword.split(/\s+/);
   const singleKeyword = keywordWords[0]; // For single word keywords
@@ -207,7 +237,31 @@ const findMatchingKnowledge = async (message) => {
     let bestMatch = null;
     let bestScore = 0;
 
-    // Check each knowledge entry for keyword matches
+    // First pass: Check for exact keyword matches (highest priority)
+    for (const entry of knowledgeEntries) {
+      if (!entry.keywords) continue;
+      
+      const keywords = entry.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0);
+      
+      // Check for exact match first (both full message match and phrase match)
+      for (const keyword of keywords) {
+        // Exact match (message equals keyword)
+        if (lowerMessage === keyword) {
+          return entry;
+        }
+        
+        // For phrases, also check if message contains the exact phrase with word boundaries
+        if (isPhrase(keyword)) {
+          const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const phraseRegex = new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i');
+          if (phraseRegex.test(lowerMessage)) {
+            return entry;
+          }
+        }
+      }
+    }
+
+    // Second pass: Check each knowledge entry for keyword matches
     for (const entry of knowledgeEntries) {
       if (!entry.keywords) continue;
       
@@ -236,28 +290,38 @@ const findMatchingKnowledge = async (message) => {
         // Base score: best single keyword match
         let finalScore = entryBestScore;
         
-        // Bonus for multiple keyword matches (indicates stronger relevance)
-        if (matchingKeywordsCount > 1) {
-          // Calculate average of top matches
-          const topScores = keywordScores.sort((a, b) => b - a).slice(0, Math.min(3, matchingKeywordsCount));
-          const avgScore = topScores.reduce((sum, s) => sum + s, 0) / topScores.length;
+        // For very high scores (exact/perfect matches), prioritize them heavily
+        if (entryBestScore >= 95) {
+          // Perfect matches (95-100) get highest priority - use score as-is with small boost
+          finalScore = entryBestScore + 10; // Small boost to ensure perfect matches win
+        } else if (entryBestScore >= 90) {
+          // Near-exact matches (90-94) get high priority
+          finalScore = entryBestScore + 5; // Small boost
+        } else {
+          // For other matches, apply normal scoring
+          // Bonus for multiple keyword matches (indicates stronger relevance)
+          if (matchingKeywordsCount > 1) {
+            // Calculate average of top matches
+            const topScores = keywordScores.sort((a, b) => b - a).slice(0, Math.min(3, matchingKeywordsCount));
+            const avgScore = topScores.reduce((sum, s) => sum + s, 0) / topScores.length;
+            
+            // Combine best match with average (weighted: 70% best, 30% average)
+            finalScore = (entryBestScore * 0.7) + (avgScore * 0.3);
+            
+            // Additional bonus for multiple matches (up to 15 points)
+            const multiMatchBonus = Math.min(15, matchingKeywordsCount * 3);
+            finalScore += multiMatchBonus;
+          }
           
-          // Combine best match with average (weighted: 70% best, 30% average)
-          finalScore = (entryBestScore * 0.7) + (avgScore * 0.3);
+          // Priority boost (priority adds up to 20 points, scaled)
+          const priorityBoost = Math.min(20, (entry.priority || 0) * 2);
+          finalScore += priorityBoost;
           
-          // Additional bonus for multiple matches (up to 15 points)
-          const multiMatchBonus = Math.min(15, matchingKeywordsCount * 3);
-          finalScore += multiMatchBonus;
-        }
-        
-        // Priority boost (priority adds up to 20 points, scaled)
-        const priorityBoost = Math.min(20, (entry.priority || 0) * 2);
-        finalScore += priorityBoost;
-        
-        // Bonus for longer, more specific keywords (indicates better match)
-        const avgKeywordLength = keywords.reduce((sum, k) => sum + k.length, 0) / keywords.length;
-        if (avgKeywordLength > 5) {
-          finalScore += Math.min(5, (avgKeywordLength - 5) * 0.5);
+          // Bonus for longer, more specific keywords (indicates better match)
+          const avgKeywordLength = keywords.reduce((sum, k) => sum + k.length, 0) / keywords.length;
+          if (avgKeywordLength > 5) {
+            finalScore += Math.min(5, (avgKeywordLength - 5) * 0.5);
+          }
         }
         
         // Only update if this is a better match
@@ -387,33 +451,31 @@ const getChatbotResponse = async (req, res) => {
     let response = '';
     let suggestions = [];
 
-    // Enhanced event query detection - more patterns
-    const eventPatterns = [
-      /\b(event|events|activity|activities)\b/i,
-      /\b(upcoming|coming|scheduled|available)\s+(event|events|activity|activities)\b/i,
-      /\b(what|which|show|list|tell me about)\s+(event|events|activity|activities)\b/i,
-      /\b(event|activity)\s+(schedule|list|calendar|info|information)\b/i,
-      /\b(join|participate|apply)\s+(to|for)\s+(event|events|activity|activities)\b/i
-    ];
+    // ALWAYS check knowledge base first - this ensures accurate matching
+    const knowledge = await findMatchingKnowledge(message);
     
-    const isEventQuery = eventPatterns.some(pattern => pattern.test(lowerMessage));
-    
-    if (isEventQuery) {
-      // First try knowledge base for event-related responses
-      const knowledge = await findMatchingKnowledge(message);
+    // If we have a good knowledge base match, use it (unless it's an event query that needs real data)
+    if (knowledge) {
+      // Check if this is an event-related query that might benefit from real event data
+      const eventPatterns = [
+        /\b(event|events|activity|activities)\b/i,
+        /\b(upcoming|coming|scheduled|available)\s+(event|events|activity|activities)\b/i,
+        /\b(what|which|show|list|tell me about)\s+(event|events|activity|activities)\b/i,
+        /\b(event|activity)\s+(schedule|list|calendar|info|information)\b/i
+      ];
       
-      if (knowledge && knowledge.category === 'events') {
-        // Use knowledge base response, but enhance with real events if available
-        response = knowledge.response;
-        suggestions = parseSuggestions(knowledge.suggestions);
-        
-        // Try to fetch real events to enhance the response
+      const isEventQuery = eventPatterns.some(pattern => pattern.test(lowerMessage));
+      const isEventCategory = knowledge.category === 'events' || knowledge.category === 'join_event';
+      
+      // If it's an event query and we have real events, enhance the response
+      if (isEventQuery && isEventCategory) {
         try {
           const [events] = await pool.query(
             "SELECT event_name, description, event_date, location FROM events WHERE status = 'ongoing' ORDER BY event_date ASC LIMIT 5"
           );
           
-          if (events.length > 0) {
+          if (events && events.length > 0) {
+            // Use real events data
             response = '📅 **Upcoming Events:**\n\n';
             events.forEach((event, index) => {
               const date = event.event_date ? new Date(event.event_date).toLocaleDateString() : 'TBA';
@@ -423,77 +485,79 @@ const getChatbotResponse = async (req, res) => {
               response += `   📆 ${date}\n\n`;
             });
             response += 'Visit your dashboard to see all events and apply for roles!';
-          }
-        } catch (err) {
-          console.error('Error fetching events:', err);
-          // Keep the knowledge base response
-        }
-      } else {
-        // No knowledge base match, try to fetch real events
-        try {
-          const [events] = await pool.query(
-            "SELECT event_name, description, event_date, location FROM events WHERE status = 'ongoing' ORDER BY event_date ASC LIMIT 5"
-          );
-          
-          if (events.length > 0) {
-            response = '📅 **Upcoming Events:**\n\n';
-            events.forEach((event, index) => {
-              const date = event.event_date ? new Date(event.event_date).toLocaleDateString() : 'TBA';
-              response += `${index + 1}. **${event.event_name}**\n`;
-              if (event.description) response += `   ${event.description.substring(0, 100)}...\n`;
-              response += `   📍 ${event.location || 'TBA'}\n`;
-              response += `   📆 ${date}\n\n`;
-            });
-            response += 'Visit your dashboard to see all events and apply for roles!';
-            suggestions = ['How do I join an event?', 'What roles are available?', 'How to apply?'];
-          } else {
-            // No events, use knowledge base or fallback
-            if (knowledge) {
-              response = knowledge.response;
-              suggestions = parseSuggestions(knowledge.suggestions);
-            } else {
-              response = '📅 Currently, there are no upcoming events scheduled.\n\n' +
-                         'Check back later or visit your dashboard to see when new events are posted!\n\n' +
-                         'Events typically include:\n' +
-                         '• Workshops and training sessions\n' +
-                         '• Consumer awareness campaigns\n' +
-                         '• Community service activities\n' +
-                         '• Networking events';
+            suggestions = parseSuggestions(knowledge.suggestions);
+            if (suggestions.length === 0) {
               suggestions = ['How do I join an event?', 'What roles are available?', 'How to apply?'];
             }
+          } else {
+            // No real events, use knowledge base response
+            response = knowledge.response;
+            suggestions = parseSuggestions(knowledge.suggestions);
           }
         } catch (err) {
           console.error('Error fetching events:', err);
-          // Use knowledge base or fallback
-          if (knowledge) {
-            response = knowledge.response;
-            suggestions = parseSuggestions(knowledge.suggestions);
-          } else {
-            response = '📅 You can view all available events on your dashboard after logging in!\n\n' +
-                       'Events include workshops, competitions, and community activities.';
-            suggestions = ['How do I join an event?', 'What roles are available?', 'How to apply?'];
-          }
+          // Fallback to knowledge base response on error
+          response = knowledge.response;
+          suggestions = parseSuggestions(knowledge.suggestions);
         }
-      }
-      
-      // Ensure suggestions are set
-      if (suggestions.length === 0) {
-        suggestions = ['How do I join an event?', 'What roles are available?', 'How to apply?'];
-      }
-    } else {
-      // For non-event queries, try knowledge base first
-      const knowledge = await findMatchingKnowledge(message);
-      
-      if (knowledge) {
-        // Use database response
+      } else {
+        // For all other queries, use knowledge base response directly
         response = knowledge.response;
         suggestions = parseSuggestions(knowledge.suggestions);
+      }
+    } else {
+      // No knowledge base match found, check if it's an event query for real events
+      const eventPatterns = [
+        /\b(event|events|activity|activities)\b/i,
+        /\b(upcoming|coming|scheduled|available)\s+(event|events|activity|activities)\b/i,
+        /\b(what|which|show|list|tell me about)\s+(event|events|activity|activities)\b/i,
+        /\b(event|activity)\s+(schedule|list|calendar|info|information)\b/i
+      ];
+      
+      const isEventQuery = eventPatterns.some(pattern => pattern.test(lowerMessage));
+      
+      if (isEventQuery) {
+        // Try to fetch real events
+        try {
+          const [events] = await pool.query(
+            "SELECT event_name, description, event_date, location FROM events WHERE status = 'ongoing' ORDER BY event_date ASC LIMIT 5"
+          );
+          
+          if (events && events.length > 0) {
+            response = '📅 **Upcoming Events:**\n\n';
+            events.forEach((event, index) => {
+              const date = event.event_date ? new Date(event.event_date).toLocaleDateString() : 'TBA';
+              response += `${index + 1}. **${event.event_name}**\n`;
+              if (event.description) response += `   ${event.description.substring(0, 100)}...\n`;
+              response += `   📍 ${event.location || 'TBA'}\n`;
+              response += `   📆 ${date}\n\n`;
+            });
+            response += 'Visit your dashboard to see all events and apply for roles!';
+            suggestions = ['How do I join an event?', 'What roles are available?', 'How to apply?'];
+          } else {
+            // No events, use fallback
+            const fallback = getFallbackResponse(lowerMessage);
+            response = fallback.response;
+            suggestions = fallback.suggestions;
+          }
+        } catch (err) {
+          console.error('Error fetching events:', err);
+          // Use fallback on error
+          const fallback = getFallbackResponse(lowerMessage);
+          response = fallback.response;
+          suggestions = fallback.suggestions;
+        }
       } else {
-        // Fallback to hardcoded responses
+        // Not an event query, use fallback
         const fallback = getFallbackResponse(lowerMessage);
         response = fallback.response;
         suggestions = fallback.suggestions;
       }
+    }
+    
+    // Ensure suggestions are always set
+    if (!suggestions || suggestions.length === 0) {
+      suggestions = ['What is GPS UTM?', 'How do I register?', 'Tell me about events'];
     }
 
     // Add a small delay to simulate AI thinking (optional)
